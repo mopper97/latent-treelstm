@@ -45,16 +45,59 @@ def get_logger(file_name):
     return logger
 
 
+# def get_lr_scheduler(logger, optimizer, mode='max', factor=0.5, patience=10, threshold=1e-4, threshold_mode='rel'):
+#     def reduce_lr(self, epoch):
+#         ReduceLROnPlateau._reduce_lr(self, epoch)
+#         logger.info(f"learning rate is reduced by factor {factor}!")
+
+#     lr_scheduler = ReduceLROnPlateau(optimizer, mode, factor, patience, False, threshold, threshold_mode)
+#     lr_scheduler._reduce_lr = partial(reduce_lr, lr_scheduler)
+#     return lr_scheduler
+
 def get_lr_scheduler(logger, optimizer, mode='max', factor=0.5, patience=10, threshold=1e-4, threshold_mode='rel'):
+    """
+    Creates a learning rate scheduler with proper parameter order for PyTorch's ReduceLROnPlateau.
+    
+    Args:
+        logger: Logger for recording lr changes
+        optimizer: PyTorch optimizer
+        mode: 'min' or 'max'
+        factor: Factor by which the learning rate will be reduced
+        patience: Number of epochs with no improvement after which learning rate will be reduced
+        threshold: Threshold for measuring the new optimum
+        threshold_mode: 'rel' or 'abs'
+        
+    Returns:
+        PyTorch ReduceLROnPlateau scheduler with custom logging
+    """
+    from torch.optim.lr_scheduler import ReduceLROnPlateau
+    from functools import partial
+    
     def reduce_lr(self, epoch):
-        ReduceLROnPlateau._reduce_lr(self, epoch)
+        # Store the original _reduce_lr method
+        original_reduce_lr = self._reduce_lr
+        # Call the original method
+        original_reduce_lr(epoch)
         logger.info(f"learning rate is reduced by factor {factor}!")
 
-    lr_scheduler = ReduceLROnPlateau(optimizer, mode, factor, patience, False, threshold, threshold_mode)
-    lr_scheduler._reduce_lr = partial(reduce_lr, lr_scheduler)
+    # Create the scheduler with the correct parameter order
+    # PyTorch expects: optimizer, mode, factor, patience, verbose, threshold, threshold_mode, cooldown, min_lr, eps
+    lr_scheduler = ReduceLROnPlateau(
+        optimizer=optimizer, 
+        mode=mode, 
+        factor=factor, 
+        patience=patience, 
+        verbose=False, 
+        threshold=threshold, 
+        threshold_mode=threshold_mode
+    )
+    
+    # Monkey patch the _reduce_lr method to add logging
+    original_reduce_lr = lr_scheduler._reduce_lr
+    lr_scheduler._reduce_lr = lambda epoch: reduce_lr(lr_scheduler, epoch)
+    
     return lr_scheduler
-
-
+    
 def clamp_grad(v, min_val, max_val):
     if v.requires_grad:
         v_tmp = v.expand_as(v)
